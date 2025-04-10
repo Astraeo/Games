@@ -1,0 +1,263 @@
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+const laserSound = new Audio("Laser Bullet  by jordivburgel -- https://freesound.org/s/217367/ -- License: Creative Commons 0"); // Laser sound
+const alienHitSound = new Audio("https://www.soundjay.com/button/button-1.wav"); // Alien hit sound
+const gameOverSound = new Audio("https://www.soundjay.com/button/button-10.wav"); // Game Over sound
+
+const PLAYER_WIDTH = 50;
+const PLAYER_HEIGHT = 30;
+const LASER_WIDTH = 5;
+const LASER_HEIGHT = 20;
+const ALIEN_RADIUS = 20;
+const ALIEN_ROWS = 5;
+const ALIEN_COLS = 8;
+
+let playerX = canvas.width / 2 - PLAYER_WIDTH / 2;
+let playerY = canvas.height - PLAYER_HEIGHT - 10;
+
+let playerSpeed = 5;
+
+let lasers = [];
+
+let aliens = [];
+let alienSpeed = 1;
+let alienDirection = 1; // 1 for right, -1 for left
+
+let score = 0;
+let lives = 3;
+let level = 1; // Start with level 1
+
+let gamePaused = true;
+let gameStarted = false;
+
+function createAliens() {
+  aliens = [];
+  for (let row = 0; row < ALIEN_ROWS; row++) {
+    aliens[row] = [];
+    for (let col = 0; col < ALIEN_COLS; col++) {
+      aliens[row][col] = { x: col * (ALIEN_RADIUS * 2) + 30, y: row * (ALIEN_RADIUS * 2) + 30, alive: true };
+    }
+  }
+}
+
+createAliens();
+
+function drawPlayer() {
+  ctx.fillStyle = "#00FF00"; // Green for the airship
+  ctx.beginPath();
+  ctx.moveTo(playerX + PLAYER_WIDTH / 2, playerY); // Top center of the airship
+  ctx.lineTo(playerX, playerY + PLAYER_HEIGHT); // Bottom-left corner
+  ctx.lineTo(playerX + PLAYER_WIDTH, playerY + PLAYER_HEIGHT); // Bottom-right corner
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawLasers() {
+  ctx.fillStyle = "red";
+  lasers.forEach(laser => {
+    ctx.fillRect(laser.x, laser.y, LASER_WIDTH, LASER_HEIGHT);
+  });
+}
+
+function drawAliens() {
+  aliens.forEach(row => {
+    row.forEach(alien => {
+      if (alien.alive) {
+        // Pulsing effect (change color and size periodically)
+        ctx.fillStyle = "blue";
+        ctx.beginPath();
+        ctx.arc(alien.x + ALIEN_RADIUS, alien.y + ALIEN_RADIUS, ALIEN_RADIUS, 0, Math.PI * 2, false);
+        ctx.closePath();
+        ctx.fill();
+      }
+    });
+  });
+}
+
+function movePlayer() {
+  if (rightPressed && playerX + PLAYER_WIDTH < canvas.width) {
+    playerX += playerSpeed;
+  }
+  if (leftPressed && playerX > 0) {
+    playerX -= playerSpeed;
+  }
+}
+
+function shootLaser() {
+  lasers.push({ x: playerX + PLAYER_WIDTH / 2 - LASER_WIDTH / 2, y: playerY });
+  laserSound.play(); // Play laser sound
+}
+
+function moveLasers() {
+  lasers.forEach((laser, index) => {
+    laser.y -= 5;
+    if (laser.y < 0) {
+      lasers.splice(index, 1); // Remove laser if it goes off the screen
+    }
+  });
+}
+
+function checkCollisions() {
+  lasers.forEach((laser, laserIndex) => {
+    aliens.forEach((row, rowIndex) => {
+      row.forEach((alien, colIndex) => {
+        if (
+          alien.alive &&
+          laser.x < alien.x + ALIEN_RADIUS * 2 &&
+          laser.x + LASER_WIDTH > alien.x &&
+          laser.y < alien.y + ALIEN_RADIUS * 2 &&
+          laser.y + LASER_HEIGHT > alien.y
+        ) {
+          alien.alive = false; // Alien is destroyed
+          lasers.splice(laserIndex, 1); // Remove laser
+          score += 10; // Increase score
+          alienHitSound.play(); // Play alien hit sound
+        }
+      });
+    });
+  });
+}
+
+function moveAliens() {
+  let edgeHit = false;
+  aliens.forEach(row => {
+    row.forEach(alien => {
+      if (alien.alive) {
+        alien.x += alienSpeed * alienDirection;
+        if (alien.x + ALIEN_RADIUS * 2 > canvas.width || alien.x < 0) {
+          edgeHit = true;
+        }
+      }
+    });
+  });
+
+  if (edgeHit) {
+    alienDirection = -alienDirection;
+    aliens.forEach(row => {
+      row.forEach(alien => {
+        alien.y += ALIEN_RADIUS * 2; // Drop down when hitting the edge
+      });
+    });
+  }
+}
+
+function checkGameOver() {
+  aliens.forEach(row => {
+    row.forEach(alien => {
+      if (alien.alive && alien.y + ALIEN_RADIUS * 2 >= playerY) {
+        lives -= 1;
+        resetGame();
+        if (lives <= 0) {
+          gameOverSound.play(); // Play game over sound
+          alert("Game Over!");
+          document.location.reload();
+        }
+      }
+    });
+  });
+}
+
+function resetGame() {
+  playerX = canvas.width / 2 - PLAYER_WIDTH / 2;
+  lasers = [];
+  alienSpeed = 1 + level * 0.5; // Increase alien speed with each level
+  alienDirection = 1;
+}
+
+function drawScoreAndLives() {
+  document.getElementById("score").textContent = score;
+  document.getElementById("lives").textContent = lives;
+  document.getElementById("level").textContent = level;
+}
+
+let leftPressed = false;
+let rightPressed = false;
+let spacePressed = false;
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "ArrowLeft") {
+    leftPressed = true;
+  }
+  if (event.key === "ArrowRight") {
+    rightPressed = true;
+  }
+  if (event.key === " " && !spacePressed) {
+    spacePressed = true;
+    shootLaser();
+  }
+});
+
+document.addEventListener("keyup", (event) => {
+  if (event.key === "ArrowLeft") {
+    leftPressed = false;
+  }
+  if (event.key === "ArrowRight") {
+    rightPressed = false;
+  }
+  if (event.key === " ") {
+    spacePressed = false;
+  }
+});
+
+function gameLoop() {
+  if (gamePaused) return;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear the canvas
+  movePlayer();
+  moveLasers();
+  moveAliens();
+  checkCollisions();
+  checkGameOver();
+
+  drawPlayer();
+  drawLasers();
+  drawAliens();
+  drawScoreAndLives();
+
+  if (score >= level * 100) {
+    level++; // Level up when score exceeds threshold
+    createAliens(); // Create a new set of aliens for the new level
+  }
+
+  requestAnimationFrame(gameLoop);
+}
+
+document.getElementById("startBtn").addEventListener("click", () => {
+  if (!gameStarted) {
+    gameStarted = true;
+    gamePaused = false;
+    gameLoop(); // Start the game loop
+    document.getElementById("startBtn").disabled = true;
+    document.getElementById("pauseBtn").disabled = false;
+    document.getElementById("resumeBtn").disabled = true;
+  }
+});
+
+document.getElementById("pauseBtn").addEventListener("click", () => {
+  gamePaused = true;
+  document.getElementById("pauseBtn").disabled = true;
+  document.getElementById("resumeBtn").disabled = false;
+});
+
+document.getElementById("resumeBtn").addEventListener("click", () => {
+  gamePaused = false;
+  document.getElementById("pauseBtn").disabled = false;
+  document.getElementById("resumeBtn").disabled = true;
+  gameLoop(); // Resume the game loop
+});
+
+document.getElementById("restartBtn").addEventListener("click", () => {
+  lives = 3;
+  score = 0;
+  level = 1;
+  gamePaused = true;
+  gameStarted = false;
+  createAliens();
+  document.getElementById("startBtn").disabled = false;
+  document.getElementById("pauseBtn").disabled = true;
+  document.getElementById("resumeBtn").disabled = true;
+  document.getElementById("score").textContent = score;
+  document.getElementById("lives").textContent = lives;
+  document.getElementById("level").textContent = level;
+});
